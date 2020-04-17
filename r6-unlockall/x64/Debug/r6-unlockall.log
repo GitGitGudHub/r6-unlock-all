@@ -1,0 +1,3 @@
+﻿  dllmain.cpp
+C:\Users\Felix\Desktop\copy\r6-unlock-all\r6-unlockall\dllmain.cpp(60,8): warning C4100: 'lpReserved': unreferenced formal parameter
+  r6-unlockall.vcxproj -> C:\Users\Felix\Desktop\copy\r6-unlock-all\x64\Debug\r6-unlockall.dll
