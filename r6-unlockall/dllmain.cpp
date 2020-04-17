@@ -1,5 +1,6 @@
 #include <Windows.h>
 #include <iostream>
+#include <array>
 
 constexpr ::std::ptrdiff_t function_off = 0x11335f0; //01-21-2020
 
