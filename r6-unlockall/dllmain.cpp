@@ -1,60 +1,67 @@
 #include <Windows.h>
 #include <iostream>
-#include <cstdint>
+
 constexpr ::std::ptrdiff_t function_off = 0x11335f0; //01-21-2020
-bool __stdcall dllthread(HMODULE hModule) {
+
+void writeProtectedBytes(BYTE *const adr, const BYTE *const shell, const size_t size)
+{
+	DWORD old;
+	VirtualProtect(adr, sizeof(BYTE), PAGE_READWRITE, &old);
+	memcpy(adr, shell, size);
+	VirtualProtect(adr, sizeof(BYTE), old, &old);
+}
+
+void writeProtectedBytes(BYTE *const adr, BYTE shell)
+{
+	writeProtectedBytes(adr, &shell, 1);
+}
+
+void dllthread(const HMODULE hModule) {
 
 
 	//Allocating console
 	AllocConsole();
-	FILE* f;
-	freopen_s(&f, "CONOUT$", "w", stdout);
+	(void)freopen("CONOUT$", "w", stdout);
 
-	std::cout << "[UNLOCK ALL]" << std::endl;
-	std::cout << "------------" << std::endl;
+	std::cout << "[UNLOCK ALL]" << '\n' << 
+				 "------------" << std::endl;
+
+	constexpr BYTE NOP = 0x90;
+	constexpr BYTE RET = 0xC3;
 
 	//shell to stop Rainbow from terminating itself
-	static const uint8_t shell[] = { 0xC3, 0x90, 0x90 };
-	DWORD old;
+	constexpr BYTE shell[3] { RET, NOP, NOP }; //two nops even needed?
 	
-	auto terminate = reinterpret_cast<uint64_t>(TerminateProcess);
+	BYTE *const terminate = reinterpret_cast<BYTE*>(TerminateProcess);
 	std::cout << "TerminateProcess at: " << std::hex << terminate << std::endl;
-	VirtualProtect(reinterpret_cast<LPVOID> (terminate), sizeof(shell), PAGE_EXECUTE_READWRITE, &old);
-	for (int idx = 0; idx < sizeof(shell); idx++)
-		*(uint8_t*)(terminate + idx * 0x1) = shell[idx]; //Write shell
-	VirtualProtect(reinterpret_cast<LPVOID> (terminate), sizeof(shell), old, 0);
 
+	writeProtectedBytes(terminate, shell, sizeof(shell));
 
 	std::cout << "Function offset: " << std::hex << function_off << std::endl;
-	uint64_t function = reinterpret_cast<uint64_t>(GetModuleHandleA(0)) + function_off;
+	uintptr_t function = reinterpret_cast<uintptr_t>(GetModuleHandleA(nullptr)) + function_off;
 	std::cout << "Function : " << std::hex << function << std::endl;
-	uint64_t off1 = function + 0x23C;
-	uint64_t off2 = function + 0x259;
+	BYTE *const adr1 = reinterpret_cast<BYTE*>(function + 0x23C);
+	BYTE *const adr2 = reinterpret_cast<BYTE*>(function + 0x259);
 	std::cout << "Swapped" << std::endl;
 
-	VirtualProtect(reinterpret_cast<LPVOID>(off1), sizeof(uint8_t), PAGE_EXECUTE_READWRITE, &old);
-	*(uint8_t*)off1 = 0x25;
-	VirtualProtect(reinterpret_cast<LPVOID>(off1), sizeof(uint8_t), old, 0);
+	writeProtectedBytes(adr1, 0x25); //8bit add?
+	writeProtectedBytes(adr2, 0x00); //32bit and?
 
-	VirtualProtect(reinterpret_cast<LPVOID>(off2), sizeof(uint8_t), PAGE_EXECUTE_READWRITE, &old);
-	*(uint8_t*)off2 = 0x0;
-	VirtualProtect(reinterpret_cast<LPVOID>(off2), sizeof(uint8_t), old, 0);
 	std::cout << "Everything unlocked!" << std::endl;
-	return true;
 	
+	FreeConsole();
+	FreeLibraryAndExitThread(hModule, 0);
 }
 
 
 
 BOOL APIENTRY DllMain(HMODULE hModule,
 	DWORD  ul_reason_for_call,
-	LPVOID lpReserved
+	void* lpReserved
 ) {
-	switch (ul_reason_for_call) {
-	case DLL_PROCESS_ATTACH:
-		CloseHandle(CreateThread(0, 0, (LPTHREAD_START_ROUTINE)dllthread, hModule, 0, 0));
-	case DLL_PROCESS_DETACH:
-		break;
+	if (ul_reason_for_call == DLL_PROCESS_ATTACH) 
+	{
+		CloseHandle(CreateThread(nullptr, 0, reinterpret_cast<LPTHREAD_START_ROUTINE>(dllthread), hModule, 0, nullptr));
 	}
 	return TRUE;
 }
